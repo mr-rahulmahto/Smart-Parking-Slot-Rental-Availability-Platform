@@ -84,35 +84,10 @@ const registerUser = async (req, res) => {
         token: generateToken(user._id, user.name, user.email, user.role),
       });
     } else {
-      // In-memory fallback
-      const existing = inMemoryUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
-      if (existing) {
-        return res.status(400).json({ success: false, message: 'User already exists with this email' });
-      }
-      const newUser = {
-        _id: 'user_' + Date.now(),
-        name,
-        email,
-        password,
-        role: role || 'driver',
-        phone: phone || '',
-        vehicleNumber: vehicleNumber || '',
-        vehicleType: vehicleType || 'car',
-      };
-      inMemoryUsers.push(newUser);
-
-      return res.status(201).json({
-        success: true,
-        user: {
-          _id: newUser._id,
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role,
-          phone: newUser.phone,
-          vehicleNumber: newUser.vehicleNumber,
-          vehicleType: newUser.vehicleType,
-        },
-        token: generateToken(newUser._id, newUser.name, newUser.email, newUser.role),
+      // DB not connected — tell the user clearly instead of silently using in-memory
+      return res.status(503).json({
+        success: false,
+        message: 'Database not connected. Your signup data cannot be saved. Please check MongoDB connection in the Vercel dashboard (MONGODB_URI env variable) and ensure your IP is whitelisted in MongoDB Atlas → Network Access.',
       });
     }
   } catch (error) {
