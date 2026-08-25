@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-const { connectDB, getDBStatus, ensureDBConnected } = require('./config/db');
+const { connectDB, getDBStatus, getDBHealth, ensureDBConnected } = require('./config/db');
 
 // Route imports
 const authRoutes = require('./routes/authRoutes');
@@ -43,10 +43,12 @@ app.use('/api/analytics', analyticsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
+  const db = getDBHealth();
   res.json({
     status: 'online',
     service: 'Smart Parking Slot & Rental Availability Platform API',
     database: getDBStatus() ? 'connected' : 'disconnected',
+    db,
     timestamp: new Date().toISOString(),
   });
 });

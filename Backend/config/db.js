@@ -3,16 +3,27 @@ const mongoose = require('mongoose');
 // Cache the connection promise so repeated calls (and serverless warm
 // invocations) reuse the SAME in-flight connection instead of starting a new one.
 let connectionPromise = null;
+let lastConnectionError = null;
 
 const getURI = () => process.env.MONGODB_URI || process.env.MONGO_URI;
 
 const isPlaceholder = (uri) =>
   !uri || uri.includes('<db_password>') || uri.includes('<password>');
 
+const getConfigStatus = () => {
+  const uri = getURI();
+  if (!uri) return 'missing';
+  if (isPlaceholder(uri)) return 'placeholder';
+  return 'configured';
+};
+
 const connectDB = async () => {
   const uri = getURI();
 
   if (isPlaceholder(uri)) {
+    lastConnectionError = !uri
+      ? 'MONGODB_URI is not set'
+      : 'MONGODB_URI still contains a placeholder password';
     console.warn('\n===============================================================');
     console.warn('⚠️  MONGODB WARNING:');
     console.warn('MONGODB_URI is missing or still has a placeholder password.');
@@ -30,17 +41,20 @@ const connectDB = async () => {
 
   connectionPromise = mongoose
     .connect(uri, {
-      serverSelectionTimeoutMS: 15000,
+      serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS) || 8000,
+      connectTimeoutMS: Number(process.env.MONGODB_CONNECT_TIMEOUT_MS) || 8000,
       socketTimeoutMS: 45000,
       maxPoolSize: 10,
     })
     .then(() => {
+      lastConnectionError = null;
       console.log(
         `✅ MongoDB Connected: ${mongoose.connection.host} | database: "${mongoose.connection.name}"`
       );
       return true;
     })
     .catch((error) => {
+      lastConnectionError = error.message;
       console.error(`❌ MongoDB Connection FAILED: ${error.message}`);
       console.warn('⚠️  Possible causes:');
       console.warn('   1. Wrong password in MONGODB_URI');
@@ -59,6 +73,15 @@ const connectDB = async () => {
 // 1 === connected. This stays correct across drops/reconnects.
 const getDBStatus = () => mongoose.connection.readyState === 1;
 
+const getDBHealth = () => ({
+  connected: getDBStatus(),
+  readyState: mongoose.connection.readyState,
+  config: getConfigStatus(),
+  host: mongoose.connection.host || null,
+  database: mongoose.connection.name || null,
+  lastError: lastConnectionError,
+});
+
 /**
  * Express middleware: guarantees the DB connection has finished (or definitively
  * failed) BEFORE any route handler runs. This fixes requests arriving during the
@@ -66,6 +89,7 @@ const getDBStatus = () => mongoose.connection.readyState === 1;
  */
 const ensureDBConnected = async (req, res, next) => {
   try {
+    if (req.path === '/health') return next();
     if (!getDBStatus()) await connectDB();
   } catch (err) {
     console.error('ensureDBConnected error:', err.message);
@@ -79,6 +103,9 @@ mongoose.connection.on('disconnected', () => {
   connectionPromise = null;
 });
 mongoose.connection.on('reconnected', () => console.log('✅ MongoDB reconnected.'));
-mongoose.connection.on('error', (err) => console.error('MongoDB error:', err.message));
+mongoose.connection.on('error', (err) => {
+  lastConnectionError = err.message;
+  console.error('MongoDB error:', err.message);
+});
 
-module.exports = { connectDB, getDBStatus, ensureDBConnected };
+module.exports = { connectDB, getDBStatus, getDBHealth, ensureDBConnected };

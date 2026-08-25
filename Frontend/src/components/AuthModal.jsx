@@ -236,6 +236,7 @@ export default function AuthModal({ onClose, onLogin, onRegister }) {
                   minLength={6}
                   placeholder="••••••••"
                   className="field-input"
+                  autoComplete={isRegister ? 'new-password' : 'current-password'}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
