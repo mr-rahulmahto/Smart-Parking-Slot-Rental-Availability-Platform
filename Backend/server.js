@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-const { connectDB } = require('./config/db');
+const { connectDB, getDBStatus, ensureDBConnected } = require('./config/db');
 
 // Route imports
 const authRoutes = require('./routes/authRoutes');
@@ -30,6 +30,11 @@ app.use(cors({
 app.use(express.json());
 app.use(morgan('dev'));
 
+// Ensure the MongoDB connection is established before ANY route handler runs.
+// Without this, requests arriving during the connection window were incorrectly
+// treated as "database not connected" and fell back to in-memory data.
+app.use('/api', ensureDBConnected);
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/spots', spotRoutes);
@@ -41,6 +46,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
     service: 'Smart Parking Slot & Rental Availability Platform API',
+    database: getDBStatus() ? 'connected' : 'disconnected',
     timestamp: new Date().toISOString(),
   });
 });
